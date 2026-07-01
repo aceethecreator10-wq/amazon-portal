@@ -9,6 +9,7 @@ interface ConfirmationModalProps {
   onConfirm: () => void;
   onCancel: () => void;
   variant?: "danger" | "default";
+  children?: React.ReactNode;
 }
 
 export default function ConfirmationModal({
@@ -20,6 +21,7 @@ export default function ConfirmationModal({
   onConfirm,
   onCancel,
   variant = "default",
+  children,
 }: ConfirmationModalProps) {
   if (!open) return null;
 
@@ -28,7 +30,8 @@ export default function ConfirmationModal({
       <div className="bg-white rounded-xl shadow-xl border border-slate-200 p-6 max-w-sm w-full mx-4">
         <h3 className="text-lg font-semibold text-slate-900 mb-2">{title}</h3>
         <p className="text-sm text-slate-600 mb-6">{message}</p>
-        <div className="flex gap-3 justify-end">
+        {children}
+        <div className="flex gap-3 justify-end mt-6">
           <button
             onClick={onCancel}
             className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"

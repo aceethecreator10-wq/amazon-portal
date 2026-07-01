@@ -3,26 +3,25 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import FormInput from "@/components/FormInput";
-import { getDeals, getOrders, setOrders } from "@/lib/storage";
-import { generateTrackingId } from "@/lib/types";
-import { getCurrentUser } from "@/lib/auth";
+import { fetchDeals } from "@/lib/supabase/deals";
+import { submitOrder } from "@/lib/supabase/orders";
 import { addToast } from "@/lib/store";
-import type { Deal, Order } from "@/lib/types";
 
 function OrderFormContent() {
   const searchParams = useSearchParams();
   const preselectedDeal = searchParams.get("deal") || "";
 
-  const [deals, setDealsState] = useState<Deal[]>([]);
+  const [deals, setDeals] = useState<any[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [trackingId, setTrackingId] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const [form, setForm] = useState({
     buyerName: "",
     whatsapp: "",
     email: "",
     dealId: preselectedDeal,
-    orderId: "",
+    orderNumber: "",
     amount: "",
     orderDate: "",
     notes: "",
@@ -31,7 +30,7 @@ function OrderFormContent() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    setDealsState(getDeals().filter((d) => d.status !== "expired"));
+    fetchDeals().then((res) => setDeals(res.deals));
   }, []);
 
   const validate = () => {
@@ -41,54 +40,39 @@ function OrderFormContent() {
     if (!form.email.trim()) errs.email = "Email is required";
     else if (!/\S+@\S+\.\S+/.test(form.email)) errs.email = "Invalid email";
     if (!form.dealId) errs.dealId = "Select a deal";
-    if (!form.orderId.trim()) errs.orderId = "Order ID is required";
+    if (!form.orderNumber.trim()) errs.orderNumber = "Order ID is required";
     if (!form.amount || Number(form.amount) <= 0) errs.amount = "Valid amount required";
     if (!form.orderDate) errs.orderDate = "Order date is required";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
+    setLoading(true);
 
-    const user = getCurrentUser();
-    const tid = generateTrackingId();
-    const deal = deals.find((d) => d.id === form.dealId);
-
-    const newOrder: Order = {
-      id: `ord-${Date.now()}`,
-      trackingId: tid,
-      buyerId: user?.id || "user-1",
+    const result = await submitOrder({
       buyerName: form.buyerName,
-      whatsapp: form.whatsapp,
       email: form.email,
+      whatsapp: form.whatsapp,
       dealId: form.dealId,
-      platform: deal?.platform || "",
-      orderId: form.orderId,
+      orderNumber: form.orderNumber,
       amount: Number(form.amount),
-      status: "submitted",
+      orderDate: form.orderDate,
       notes: form.notes,
-      statusLogs: [
-        {
-          id: `log-${Date.now()}`,
-          status: "submitted",
-          note: "Order submitted successfully",
-          changedBy: user?.name || "Buyer",
-          createdAt: new Date().toISOString(),
-        },
-      ],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    });
 
-    const orders = getOrders();
-    orders.unshift(newOrder);
-    setOrders(orders);
+    setLoading(false);
 
-    setTrackingId(tid);
+    if (result.error) {
+      addToast("error", result.error);
+      return;
+    }
+
+    setTrackingId(result.trackingId!);
     setSubmitted(true);
-    addToast("success", `Order submitted! Tracking ID: ${tid}`);
+    addToast("success", `Order submitted! Tracking ID: ${result.trackingId}`);
   };
 
   if (submitted) {
@@ -135,137 +119,51 @@ function OrderFormContent() {
       </div>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-slate-200 shadow-sm">
-        {/* Section: Personal Details */}
         <div className="p-5 border-b border-slate-100">
           <h3 className="text-sm font-semibold text-slate-900 mb-4">Personal Details</h3>
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormInput
-                label="Buyer Name"
-                id="buyerName"
-                value={form.buyerName}
-                onChange={(e) => setForm({ ...form, buyerName: e.target.value })}
-                error={errors.buyerName}
-                placeholder="John Doe"
-              />
-              <FormInput
-                label="WhatsApp Number"
-                id="whatsapp"
-                type="tel"
-                inputMode="tel"
-                value={form.whatsapp}
-                onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
-                error={errors.whatsapp}
-                placeholder="+91-9876543210"
-              />
+              <FormInput label="Buyer Name" id="buyerName" value={form.buyerName} onChange={(e) => setForm({ ...form, buyerName: e.target.value })} error={errors.buyerName} placeholder="John Doe" />
+              <FormInput label="WhatsApp Number" id="whatsapp" type="tel" inputMode="tel" value={form.whatsapp} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} error={errors.whatsapp} placeholder="+91-9876543210" />
             </div>
-            <FormInput
-              label="Email"
-              id="email"
-              type="email"
-              inputMode="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              error={errors.email}
-              placeholder="buyer@example.com"
-            />
+            <FormInput label="Email" id="email" type="email" inputMode="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} error={errors.email} placeholder="buyer@example.com" />
           </div>
         </div>
 
-        {/* Section: Order Details */}
         <div className="p-5 border-b border-slate-100">
           <h3 className="text-sm font-semibold text-slate-900 mb-4">Order Details</h3>
           <div className="space-y-4">
             <div className="space-y-1">
-              <label htmlFor="dealId" className="block text-sm font-medium text-slate-700">
-                Select Deal
-              </label>
-              <select
-                id="dealId"
-                value={form.dealId}
-                onChange={(e) => setForm({ ...form, dealId: e.target.value })}
-                className={`w-full px-3 py-3 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${
-                  errors.dealId ? "border-red-300" : "border-slate-300"
-                }`}
-              >
+              <label htmlFor="dealId" className="block text-sm font-medium text-slate-700">Select Deal</label>
+              <select id="dealId" value={form.dealId} onChange={(e) => setForm({ ...form, dealId: e.target.value })}
+                className={`w-full px-3 py-3 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${errors.dealId ? "border-red-300" : "border-slate-300"}`}>
                 <option value="">-- Select a deal --</option>
-                {deals.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.title} - {d.platform} ({d.dealPrice})
-                  </option>
+                {deals.map((d: any) => (
+                  <option key={d.id} value={d.id}>{d.title} - {d.platform}</option>
                 ))}
               </select>
               {errors.dealId && <p className="text-xs text-red-500">{errors.dealId}</p>}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormInput
-                label="Order ID"
-                id="orderId"
-                value={form.orderId}
-                onChange={(e) => setForm({ ...form, orderId: e.target.value })}
-                error={errors.orderId}
-                placeholder="AMZ-ORD-12345"
-              />
-              <FormInput
-                label="Order Amount"
-                id="amount"
-                type="number"
-                inputMode="numeric"
-                value={form.amount}
-                onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                error={errors.amount}
-                placeholder="14999"
-              />
+              <FormInput label="Order Number" id="orderNumber" value={form.orderNumber} onChange={(e) => setForm({ ...form, orderNumber: e.target.value })} error={errors.orderNumber} placeholder="AMZ-ORD-12345" />
+              <FormInput label="Order Amount" id="amount" type="number" inputMode="numeric" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} error={errors.amount} placeholder="14999" />
             </div>
-            <FormInput
-              label="Order Date"
-              id="orderDate"
-              type="date"
-              value={form.orderDate}
-              onChange={(e) => setForm({ ...form, orderDate: e.target.value })}
-              error={errors.orderDate}
-            />
+            <FormInput label="Order Date" id="orderDate" type="date" value={form.orderDate} onChange={(e) => setForm({ ...form, orderDate: e.target.value })} error={errors.orderDate} />
           </div>
         </div>
 
-        {/* Section: Attachments & Notes */}
         <div className="p-5">
-          <h3 className="text-sm font-semibold text-slate-900 mb-4">Attachments & Notes</h3>
+          <h3 className="text-sm font-semibold text-slate-900 mb-4">Notes</h3>
           <div className="space-y-4">
             <div className="space-y-1">
-              <label htmlFor="screenshot" className="block text-sm font-medium text-slate-700">
-                Order Screenshot (optional - demo)
-              </label>
-              <div className="flex items-center gap-3">
-                <label
-                  htmlFor="screenshot"
-                  className="cursor-pointer px-4 py-3 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors touch-target"
-                >
-                  Choose File
-                </label>
-                <span className="text-xs text-slate-500">No file chosen</span>
-              </div>
-              <input id="screenshot" type="file" accept="image/*" className="hidden" />
-              <p className="text-[10px] text-slate-400">Demo: file is not actually uploaded.</p>
-            </div>
-            <div className="space-y-1">
-              <label htmlFor="notes" className="block text-sm font-medium text-slate-700">
-                Notes
-              </label>
-              <textarea
-                id="notes"
-                rows={3}
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              <label htmlFor="notes" className="block text-sm font-medium text-slate-700">Notes (optional)</label>
+              <textarea id="notes" rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 className="w-full px-3 py-3 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white resize-none"
-                placeholder="Any additional notes..."
-              />
+                placeholder="Any additional notes..." />
             </div>
-            <button
-              type="submit"
-              className="w-full px-6 py-4 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 active:bg-blue-800 transition-colors text-[16px] touch-target"
-            >
-              Submit Order
+            <button type="submit" disabled={loading}
+              className="w-full px-6 py-4 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 transition-colors text-[16px] touch-target">
+              {loading ? "Submitting..." : "Submit Order"}
             </button>
           </div>
         </div>

@@ -5,27 +5,21 @@ import MobileCardTable from "@/components/MobileCardTable";
 import StatusBadge from "@/components/StatusBadge";
 import SearchFilterBar from "@/components/SearchFilterBar";
 import AuthGuard from "@/components/AuthGuard";
-import { getOrders, setOrders } from "@/lib/storage";
-import { getCurrentUser } from "@/lib/auth";
+import { fetchOrders, updateOrderStatus } from "@/lib/supabase/orders";
 import { formatPrice, formatDate } from "@/lib/utils";
 import { addToast } from "@/lib/store";
-import type { Order } from "@/lib/types";
 
 const flow = ["submitted", "under_review", "approved", "rejected", "processing", "completed"];
 
 export default function MediatorOrdersPage() {
-  const [orders, setOrdersState] = useState<Order[]>([]);
+  const [orders, setOrdersState] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (!loaded) {
-      const user = getCurrentUser();
-      if (user) {
-        setOrdersState(getOrders().filter((o) => !o.assignedMediatorId || o.assignedMediatorId === user.id));
-        setLoaded(true);
-      }
+      fetchOrders().then((res) => { setOrdersState(res.orders); setLoaded(true); });
     }
   }, [loaded]);
 
@@ -33,38 +27,45 @@ export default function MediatorOrdersPage() {
     let result = orders;
     if (search) {
       const q = search.toLowerCase();
-      result = result.filter((o) => o.trackingId.toLowerCase().includes(q) || o.buyerName.toLowerCase().includes(q) || o.platform.toLowerCase().includes(q));
+      result = result.filter((o) => o.tracking_id?.toLowerCase().includes(q) || o.buyer_name?.toLowerCase().includes(q) || o.platform?.toLowerCase().includes(q));
     }
     if (statusFilter !== "all") result = result.filter((o) => o.status === statusFilter);
     return result;
   }, [orders, search, statusFilter]);
 
-  const updateStatus = (id: string, status: string) => {
-    const all = getOrders();
-    const idx = all.findIndex((o) => o.id === id);
-    if (idx === -1) return;
-    const user = getCurrentUser();
-    all[idx] = {
-      ...all[idx],
-      status: status as Order["status"],
-      assignedMediatorId: user?.id || all[idx].assignedMediatorId,
-      statusLogs: [...all[idx].statusLogs, { id: `log-${Date.now()}`, status, note: "", changedBy: user?.name || "Mediator", createdAt: new Date().toISOString() }],
-      updatedAt: new Date().toISOString(),
-    };
-    setOrders(all);
-    setOrdersState(getOrders().filter((o) => !o.assignedMediatorId || o.assignedMediatorId === user?.id));
+  const updateStatus = async (id: string, status: string) => {
+    const res = await updateOrderStatus(id, status);
+    if (res.error) { addToast("error", res.error); return; }
+    const result = await fetchOrders();
+    setOrdersState(result.orders);
     addToast("success", `Order ${status.replace("_", " ")}`);
   };
 
   const columns = [
-    { key: "trackingId", header: "Tracking ID", render: (r: Order) => <span className="font-mono text-xs font-medium text-blue-600">{r.trackingId}</span> },
-    { key: "buyerName", header: "Buyer" },
+    { key: "tracking_id", header: "Tracking ID", render: (r: any) => <span className="font-mono text-xs font-medium text-blue-600">{r.tracking_id}</span> },
+    { key: "buyer_name", header: "Buyer" },
     { key: "platform", header: "Platform" },
-    { key: "amount", header: "Amount", render: (r: Order) => formatPrice(r.amount) },
-    { key: "status", header: "Status", render: (r: Order) => <StatusBadge status={r.status} /> },
-    { key: "createdAt", header: "Date", render: (r: Order) => <span className="text-xs text-slate-500">{formatDate(r.createdAt)}</span> },
+    { key: "amount", header: "Amount", render: (r: any) => formatPrice(r.amount) },
+    { key: "status", header: "Status", render: (r: any) => <StatusBadge status={r.status} /> },
+    { key: "created_at", header: "Date", render: (r: any) => <span className="text-xs text-slate-500">{formatDate(r.created_at)}</span> },
     {
-      key: "actions", header: "Actions", hideOnMobile: true, render: (r: Order) => {
+      key: "actions", header: "Actions", hideOnMobile: true, render: (r: any) => {
+        const idx = flow.indexOf(r.status);
+        return (
+          <div className="flex gap-1 flex-wrap">
+            {idx < flow.length - 1 && (
+              <button onClick={() => updateStatus(r.id, flow[idx + 1])} className="px-2 py-1 text-[10px] font-medium bg-blue-600 text-white rounded hover:bg-blue-700">
+                {flow[idx + 1].replace("_", " ")}
+              </button>
+            )}
+            {r.status !== "rejected" && r.status !== "completed" && (
+              <button onClick={() => updateStatus(r.id, "rejected")} className="px-2 py-1 text-[10px] font-medium bg-red-500 text-white rounded hover:bg-red-600">
+                Reject
+              </button>
+            )}
+          </div>
+        );
+      }, mobileCardFooter: (r: any) => {
         const idx = flow.indexOf(r.status);
         return (
           <div className="flex gap-1 flex-wrap">
@@ -104,31 +105,14 @@ export default function MediatorOrdersPage() {
         <MobileCardTable
           columns={columns}
           data={filtered}
-          keyExtractor={(r) => r.id}
+          keyExtractor={(r: any) => r.id}
           emptyMessage="No orders to review."
-          mobileCardHeader={(r: Order) => (
+          mobileCardHeader={(r: any) => (
             <div className="flex items-center justify-between w-full">
-              <span className="font-mono text-xs font-medium text-blue-600">{r.trackingId}</span>
+              <span className="font-mono text-xs font-medium text-blue-600">{r.tracking_id}</span>
               <StatusBadge status={r.status} />
             </div>
           )}
-          mobileCardFooter={(r: Order) => {
-            const idx = flow.indexOf(r.status);
-            return (
-              <div className="flex gap-1 flex-wrap">
-                {idx < flow.length - 1 && (
-                  <button onClick={() => updateStatus(r.id, flow[idx + 1])} className="px-2 py-1 text-[10px] font-medium bg-blue-600 text-white rounded hover:bg-blue-700">
-                    {flow[idx + 1].replace("_", " ")}
-                  </button>
-                )}
-                {r.status !== "rejected" && r.status !== "completed" && (
-                  <button onClick={() => updateStatus(r.id, "rejected")} className="px-2 py-1 text-[10px] font-medium bg-red-500 text-white rounded hover:bg-red-600">
-                    Reject
-                  </button>
-                )}
-              </div>
-            );
-          }}
         />
       </div>
     </AuthGuard>

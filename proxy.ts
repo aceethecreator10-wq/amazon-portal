@@ -25,6 +25,16 @@ const PUBLIC_ROUTES = new Set([
   "/auth/callback",
 ]);
 
+// --- Role-specific login/register routes (no auth required) ---
+const LOGIN_ROUTES = new Set([
+  "/buyer/login",
+  "/buyer/register",
+  "/mediator/login",
+  "/admin/login",
+]);
+
+// --- Role-specific dashboard routes (auth + role check) ---
+
 // --- Role-based route prefixes ---
 const ROLE_ROUTES: Record<string, string> = {
   buyer: "/buyer",
@@ -56,18 +66,19 @@ export async function proxy(request: NextRequest) {
     return await updateSession(request);
   }
 
+  // --- Login/register routes: let through without auth check ---
+  if (LOGIN_ROUTES.has(pathname)) {
+    return await updateSession(request);
+  }
+
   // --- Determine required role for this route ---
   const requiredRole = getRouteRole(pathname);
 
   // If no role required and not public, it might be a protected page.
   // We still check for a valid session.
-  // First, update session via Supabase SSR.
   let supabaseResponse = NextResponse.next({ request });
 
-  // We need to create the supabase client ourselves to read user.
-  // We'll use the same pattern as updateSession but also check auth.
   const { createServerClient } = await import("@supabase/ssr");
-  // Import Database type for type safety
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -93,7 +104,7 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // --- Unauthenticated: redirect to login ---
+  // --- Unauthenticated: redirect to /login for protected routes ---
   if (!user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
@@ -102,10 +113,6 @@ export async function proxy(request: NextRequest) {
 
   // --- Role-based route enforcement ---
   if (requiredRole) {
-    // Use admin client to bypass RLS and read the profile role
-    // PRODUCTION NOTE: This is the only way to reliably get the
-    // user's role in middleware, since the session payload may
-    // not include role metadata and RLS would block anon access.
     const admin = createAdminClient();
     const { data: profile } = await admin
       .from("profiles")
@@ -116,23 +123,18 @@ export async function proxy(request: NextRequest) {
     const actualRole = profile?.role;
 
     if (!actualRole) {
-      // No profile found — redirect to login
       const url = request.nextUrl.clone();
       url.pathname = "/login";
       return NextResponse.redirect(url);
     }
 
     if (actualRole !== requiredRole) {
-      // Wrong role — redirect to the user's correct dashboard
       const target = DASHBOARD[actualRole] || "/login";
       const url = request.nextUrl.clone();
       url.pathname = target;
       return NextResponse.redirect(url);
     }
 
-    // Handle /mediator root (redirect to dashboard or login)
-    // PRODUCTION NOTE: This block handles the short-circuit for
-    // the mediator landing page when the user is already authenticated.
     if (pathname === "/mediator") {
       if (actualRole === "mediator") {
         const url = request.nextUrl.clone();

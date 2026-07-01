@@ -5,27 +5,21 @@ import MobileCardTable from "@/components/MobileCardTable";
 import StatusBadge from "@/components/StatusBadge";
 import SearchFilterBar from "@/components/SearchFilterBar";
 import AuthGuard from "@/components/AuthGuard";
-import { getRefundRequests, setRefundRequests } from "@/lib/storage";
-import { getCurrentUser } from "@/lib/auth";
+import { fetchRefunds, updateRefundStatus } from "@/lib/supabase/refunds";
 import { formatDate } from "@/lib/utils";
 import { addToast } from "@/lib/store";
-import type { RefundRequest } from "@/lib/types";
 
 const flow = ["submitted", "documents_received", "verification", "approved", "rejected", "paid"];
 
 export default function MediatorRefundsPage() {
-  const [refunds, setRefundsState] = useState<RefundRequest[]>([]);
+  const [refunds, setRefundsState] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (!loaded) {
-      const user = getCurrentUser();
-      if (user) {
-        setRefundsState(getRefundRequests().filter((r) => !r.assignedMediatorId || r.assignedMediatorId === user.id));
-        setLoaded(true);
-      }
+      fetchRefunds().then((res) => { setRefundsState(res.refunds); setLoaded(true); });
     }
   }, [loaded]);
 
@@ -33,37 +27,44 @@ export default function MediatorRefundsPage() {
     let result = refunds;
     if (search) {
       const q = search.toLowerCase();
-      result = result.filter((r) => r.refundId.toLowerCase().includes(q) || r.trackingId.toLowerCase().includes(q) || r.reason.toLowerCase().includes(q));
+      result = result.filter((r) => r.refund_id?.toLowerCase().includes(q) || r.tracking_id?.toLowerCase().includes(q) || r.reason?.toLowerCase().includes(q));
     }
     if (statusFilter !== "all") result = result.filter((r) => r.status === statusFilter);
     return result;
   }, [refunds, search, statusFilter]);
 
-  const updateStatus = (id: string, status: string) => {
-    const all = getRefundRequests();
-    const idx = all.findIndex((r) => r.id === id);
-    if (idx === -1) return;
-    const user = getCurrentUser();
-    all[idx] = {
-      ...all[idx],
-      status: status as RefundRequest["status"],
-      assignedMediatorId: user?.id || all[idx].assignedMediatorId,
-      statusLogs: [...all[idx].statusLogs, { id: `log-${Date.now()}`, status, note: "", changedBy: user?.name || "Mediator", createdAt: new Date().toISOString() }],
-      updatedAt: new Date().toISOString(),
-    };
-    setRefundRequests(all);
-    setRefundsState(getRefundRequests().filter((r) => !r.assignedMediatorId || r.assignedMediatorId === user?.id));
+  const updateStatus = async (id: string, status: string) => {
+    const res = await updateRefundStatus(id, status);
+    if (res.error) { addToast("error", res.error); return; }
+    const result = await fetchRefunds();
+    setRefundsState(result.refunds);
     addToast("success", `Refund ${status.replace("_", " ")}`);
   };
 
   const columns = [
-    { key: "refundId", header: "Refund ID", render: (r: RefundRequest) => <span className="font-mono text-xs font-medium text-amber-600">{r.refundId}</span> },
-    { key: "trackingId", header: "Tracking", render: (r: RefundRequest) => <span className="font-mono text-xs">{r.trackingId}</span> },
-    { key: "reason", header: "Reason", className: "max-w-[150px]", render: (r: RefundRequest) => <span className="text-xs truncate block">{r.reason}</span> },
-    { key: "status", header: "Status", render: (r: RefundRequest) => <StatusBadge status={r.status} /> },
-    { key: "createdAt", header: "Date", render: (r: RefundRequest) => <span className="text-xs text-slate-500">{formatDate(r.createdAt)}</span> },
+    { key: "refund_id", header: "Refund ID", render: (r: any) => <span className="font-mono text-xs font-medium text-amber-600">{r.refund_id}</span> },
+    { key: "tracking_id", header: "Tracking", render: (r: any) => <span className="font-mono text-xs">{r.tracking_id}</span> },
+    { key: "reason", header: "Reason", className: "max-w-[150px]", render: (r: any) => <span className="text-xs truncate block">{r.reason}</span> },
+    { key: "status", header: "Status", render: (r: any) => <StatusBadge status={r.status} /> },
+    { key: "created_at", header: "Date", render: (r: any) => <span className="text-xs text-slate-500">{formatDate(r.created_at)}</span> },
     {
-      key: "actions", header: "Actions", hideOnMobile: true, render: (r: RefundRequest) => {
+      key: "actions", header: "Actions", hideOnMobile: true, render: (r: any) => {
+        const idx = flow.indexOf(r.status);
+        return (
+          <div className="flex gap-1 flex-wrap">
+            {idx < flow.length - 1 && (
+              <button onClick={() => updateStatus(r.id, flow[idx + 1])} className="px-2 py-1 text-[10px] font-medium bg-amber-600 text-white rounded hover:bg-amber-700">
+                {flow[idx + 1].replace("_", " ")}
+              </button>
+            )}
+            {r.status !== "rejected" && r.status !== "paid" && (
+              <button onClick={() => updateStatus(r.id, "rejected")} className="px-2 py-1 text-[10px] font-medium bg-red-500 text-white rounded hover:bg-red-600">
+                Reject
+              </button>
+            )}
+          </div>
+        );
+      }, mobileCardFooter: (r: any) => {
         const idx = flow.indexOf(r.status);
         return (
           <div className="flex gap-1 flex-wrap">
@@ -103,31 +104,14 @@ export default function MediatorRefundsPage() {
         <MobileCardTable
           columns={columns}
           data={filtered}
-          keyExtractor={(r) => r.id}
+          keyExtractor={(r: any) => r.id}
           emptyMessage="No refund requests to review."
-          mobileCardHeader={(r: RefundRequest) => (
+          mobileCardHeader={(r: any) => (
             <div className="flex items-center justify-between w-full">
-              <span className="font-mono text-xs font-medium text-amber-600">{r.refundId}</span>
+              <span className="font-mono text-xs font-medium text-amber-600">{r.refund_id}</span>
               <StatusBadge status={r.status} />
             </div>
           )}
-          mobileCardFooter={(r: RefundRequest) => {
-            const idx = flow.indexOf(r.status);
-            return (
-              <div className="flex gap-1 flex-wrap">
-                {idx < flow.length - 1 && (
-                  <button onClick={() => updateStatus(r.id, flow[idx + 1])} className="px-2 py-1 text-[10px] font-medium bg-amber-600 text-white rounded hover:bg-amber-700">
-                    {flow[idx + 1].replace("_", " ")}
-                  </button>
-                )}
-                {r.status !== "rejected" && r.status !== "paid" && (
-                  <button onClick={() => updateStatus(r.id, "rejected")} className="px-2 py-1 text-[10px] font-medium bg-red-500 text-white rounded hover:bg-red-600">
-                    Reject
-                  </button>
-                )}
-              </div>
-            );
-          }}
         />
       </div>
     </AuthGuard>
