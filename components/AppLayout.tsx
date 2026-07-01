@@ -8,13 +8,12 @@ import DashboardSidebar from "./DashboardSidebar";
 import MobileBottomNav from "./MobileBottomNav";
 import StickyBottomCTA from "./StickyBottomCTA";
 import ToastContainer from "./Toast";
-import { seedDemoData } from "@/lib/storage";
-import { getCurrentUser } from "@/lib/auth";
-import type { UserRole } from "@/lib/types";
+import { createClient } from "@/lib/supabase/client";
 
 const publicPaths = [
   "/", "/deals", "/order", "/track", "/refund", "/help",
   "/privacy", "/terms", "/refund-policy",
+  "/login", "/register", "/forgot-password", "/reset-password",
   "/buyer/login", "/buyer/register",
   "/mediator/login", "/admin/login",
 ];
@@ -23,12 +22,20 @@ const ctaPaths = ["/deals", "/order", "/track"];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [user, setUser] = useState<{ role: UserRole } | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    seedDemoData();
-    const u = getCurrentUser();
-    setUser(u);
+    const check = async () => {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data: profile } = await (supabase.from("profiles") as any).select("role").eq("id", session.user.id).single();
+        if (profile) setUserRole(profile.role);
+      }
+      setLoading(false);
+    };
+    check();
   }, [pathname]);
 
   const isPublic = publicPaths.includes(pathname);
@@ -39,8 +46,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const showCTA = ctaPaths.includes(pathname);
 
-  if (pathname === "/mediator") {
-    return <>{children}</>;
+  if (loading) {
+    return <div className="min-h-screen flex flex-col"><main className="flex-1">{children}</main></div>;
   }
 
   if (isPublic) {
@@ -55,16 +62,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (isDashboard && user) {
+  if (isDashboard && userRole) {
     return (
       <div className="min-h-screen flex bg-slate-50">
-        <DashboardSidebar role={user.role} />
+        <DashboardSidebar role={userRole} />
         <div className="flex-1 flex flex-col min-w-0">
-          <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-auto pb-20 lg:pb-8">
-            {children}
-          </main>
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-auto pb-20 lg:pb-8">{children}</main>
         </div>
-        <MobileBottomNav role={user.role} />
+        <MobileBottomNav role={userRole} />
         <ToastContainer />
       </div>
     );

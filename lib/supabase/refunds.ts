@@ -11,6 +11,8 @@ export async function submitRefund(formData: {
   ifsc?: string;
   whatsapp: string;
   reason: string;
+  reviewScreenshotUrl?: string;
+  deliveryScreenshotUrl?: string;
 }) {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -43,6 +45,8 @@ export async function submitRefund(formData: {
       ifsc: formData.ifsc || "",
       whatsapp: formData.whatsapp,
       reason: formData.reason,
+      review_screenshot_url: formData.reviewScreenshotUrl || null,
+      delivery_screenshot_url: formData.deliveryScreenshotUrl || null,
       status: "submitted",
     })
     .select("refund_id, id")

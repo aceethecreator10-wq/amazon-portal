@@ -11,6 +11,7 @@ export async function submitOrder(formData: {
   amount: number;
   orderDate: string;
   notes?: string;
+  screenshotUrl?: string;
 }) {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -41,6 +42,7 @@ export async function submitOrder(formData: {
       order_number: formData.orderNumber,
       amount: formData.amount,
       order_date: formData.orderDate,
+      screenshot_url: formData.screenshotUrl || null,
       notes: formData.notes || "",
       status: "submitted",
     })

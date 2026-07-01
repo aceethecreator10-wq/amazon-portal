@@ -1,15 +1,12 @@
-// PRODUCTION NOTE: This is a mock auth guard. Replace with proper middleware/route protection.
-
 "use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
-import type { UserRole } from "@/lib/types";
+import { createClient } from "@/lib/supabase/client";
 
 interface AuthGuardProps {
   children: React.ReactNode;
-  role?: UserRole;
+  role?: string;
   fallback?: string;
 }
 
@@ -19,17 +16,24 @@ export default function AuthGuard({ children, role, fallback }: AuthGuardProps) 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const user = getCurrentUser();
-    if (!user) {
-      router.push(fallback || "/");
-      return;
-    }
-    if (role && user.role !== role) {
-      router.push(fallback || "/");
-      return;
-    }
-    setAuthorized(true);
-    setLoading(false);
+    const check = async () => {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push(fallback || "/login");
+        return;
+      }
+      if (role) {
+        const { data: profile } = await (supabase.from("profiles") as any).select("role").eq("id", session.user.id).single();
+        if (!profile || profile.role !== role) {
+          router.push(fallback || "/login");
+          return;
+        }
+      }
+      setAuthorized(true);
+      setLoading(false);
+    };
+    check();
   }, [router, role, fallback]);
 
   if (loading) {

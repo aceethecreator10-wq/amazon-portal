@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import FormInput from "@/components/FormInput";
+import FileUpload from "@/components/FileUpload";
 import { fetchDeals } from "@/lib/supabase/deals";
 import { submitOrder } from "@/lib/supabase/orders";
 import { addToast } from "@/lib/store";
@@ -15,6 +16,7 @@ function OrderFormContent() {
   const [submitted, setSubmitted] = useState(false);
   const [trackingId, setTrackingId] = useState("");
   const [loading, setLoading] = useState(false);
+  const [screenshotUrl, setScreenshotUrl] = useState("");
 
   const [form, setForm] = useState({
     buyerName: "",
@@ -29,9 +31,7 @@ function OrderFormContent() {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    fetchDeals().then((res) => setDeals(res.deals));
-  }, []);
+  useEffect(() => { fetchDeals().then((res) => setDeals(res.deals)); }, []);
 
   const validate = () => {
     const errs: Record<string, string> = {};
@@ -61,6 +61,7 @@ function OrderFormContent() {
       amount: Number(form.amount),
       orderDate: form.orderDate,
       notes: form.notes,
+      screenshotUrl: screenshotUrl || undefined,
     });
 
     setLoading(false);
@@ -91,18 +92,10 @@ function OrderFormContent() {
             <p className="text-lg font-mono font-bold text-blue-600">{trackingId}</p>
           </div>
           <div className="flex gap-3 justify-center">
-            <button
-              onClick={() => navigator.clipboard.writeText(trackingId)}
-              className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Copy Tracking ID
-            </button>
-            <a
-              href={`/track?id=${trackingId}`}
-              className="px-4 py-2 text-sm font-medium bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
-            >
-              Track Order
-            </a>
+            <button onClick={() => navigator.clipboard.writeText(trackingId)}
+              className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">Copy Tracking ID</button>
+            <a href={`/track?id=${trackingId}`}
+              className="px-4 py-2 text-sm font-medium bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors">Track Order</a>
           </div>
         </div>
       </div>
@@ -113,9 +106,7 @@ function OrderFormContent() {
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">Submit Order</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Fill in the details below to submit your order for processing
-        </p>
+        <p className="text-sm text-slate-500 mt-1">Fill in the details below to submit your order for processing</p>
       </div>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-slate-200 shadow-sm">
@@ -138,9 +129,7 @@ function OrderFormContent() {
               <select id="dealId" value={form.dealId} onChange={(e) => setForm({ ...form, dealId: e.target.value })}
                 className={`w-full px-3 py-3 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${errors.dealId ? "border-red-300" : "border-slate-300"}`}>
                 <option value="">-- Select a deal --</option>
-                {deals.map((d: any) => (
-                  <option key={d.id} value={d.id}>{d.title} - {d.platform}</option>
-                ))}
+                {deals.map((d: any) => (<option key={d.id} value={d.id}>{d.title} - {d.platform}</option>))}
               </select>
               {errors.dealId && <p className="text-xs text-red-500">{errors.dealId}</p>}
             </div>
@@ -149,6 +138,7 @@ function OrderFormContent() {
               <FormInput label="Order Amount" id="amount" type="number" inputMode="numeric" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} error={errors.amount} placeholder="14999" />
             </div>
             <FormInput label="Order Date" id="orderDate" type="date" value={form.orderDate} onChange={(e) => setForm({ ...form, orderDate: e.target.value })} error={errors.orderDate} />
+            <FileUpload label="Order Screenshot (optional)" id="orderScreenshot" bucket="order-screenshots" path={preselectedDeal ? `orders/${preselectedDeal}` : "orders"} onUploadComplete={setScreenshotUrl} onError={(e) => addToast("error", e)} />
           </div>
         </div>
 
@@ -158,8 +148,7 @@ function OrderFormContent() {
             <div className="space-y-1">
               <label htmlFor="notes" className="block text-sm font-medium text-slate-700">Notes (optional)</label>
               <textarea id="notes" rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                className="w-full px-3 py-3 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white resize-none"
-                placeholder="Any additional notes..." />
+                className="w-full px-3 py-3 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white resize-none" placeholder="Any additional notes..." />
             </div>
             <button type="submit" disabled={loading}
               className="w-full px-6 py-4 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 transition-colors text-[16px] touch-target">

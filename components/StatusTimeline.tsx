@@ -1,8 +1,13 @@
-import type { StatusLog } from "@/lib/types";
-import { getStatusLabel, getStatusColor } from "@/lib/utils";
+import { getStatusLabel } from "@/lib/utils";
+
+interface TimelineLog {
+  status: string;
+  note?: string | null;
+  created_at: string;
+}
 
 interface StatusTimelineProps {
-  logs: StatusLog[];
+  logs: TimelineLog[];
   currentStatus: string;
   allStatuses: string[];
 }
@@ -20,17 +25,11 @@ export default function StatusTimeline({ logs, currentStatus, allStatuses }: Sta
         return (
           <div key={status} className="flex gap-3">
             <div className="flex flex-col items-center">
-              <div
-                className={`w-3 h-3 rounded-full border-2 ${
-                  isPast
-                    ? "bg-blue-600 border-blue-600"
-                    : "bg-white border-slate-300"
-                } ${isCurrent ? "ring-2 ring-blue-200" : ""}`}
-              />
+              <div className={`w-3 h-3 rounded-full border-2 ${
+                isPast ? "bg-blue-600 border-blue-600" : "bg-white border-slate-300"
+              } ${isCurrent ? "ring-2 ring-blue-200" : ""}`} />
               {idx < allStatuses.length - 1 && (
-                <div
-                  className={`w-0.5 h-8 ${isPast ? "bg-blue-600" : "bg-slate-200"}`}
-                />
+                <div className={`w-0.5 h-8 ${isPast ? "bg-blue-600" : "bg-slate-200"}`} />
               )}
             </div>
             <div className="pb-3">
@@ -40,7 +39,7 @@ export default function StatusTimeline({ logs, currentStatus, allStatuses }: Sta
               {log && (
                 <div className="mt-0.5 space-y-0.5">
                   <p className="text-xs text-slate-500">
-                    {new Date(log.createdAt).toLocaleString("en-IN", {
+                    {new Date(log.created_at).toLocaleString("en-IN", {
                       day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
                     })}
                   </p>

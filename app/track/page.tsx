@@ -105,7 +105,7 @@ function TrackContent() {
 
           <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
             <h3 className="font-semibold text-slate-900 text-sm mb-4">Order Timeline</h3>
-            <StatusTimeline logs={orderLogs.map((l: any) => ({ id: l.id, status: l.new_status, note: l.note || "", changedBy: l.changed_by, createdAt: l.created_at }))}
+            <StatusTimeline logs={orderLogs.map((l: any) => ({ status: l.new_status, note: l.note || "", created_at: l.created_at }))}
               currentStatus={order.status} allStatuses={orderStatuses} />
           </div>
 
@@ -128,7 +128,7 @@ function TrackContent() {
               </div>
               <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
                 <h3 className="font-semibold text-slate-900 text-sm mb-4">Refund Timeline</h3>
-                <StatusTimeline logs={refundLogs.map((l: any) => ({ id: l.id, status: l.new_status, note: l.note || "", changedBy: l.changed_by, createdAt: l.created_at }))}
+                <StatusTimeline logs={refundLogs.map((l: any) => ({ status: l.new_status, note: l.note || "", created_at: l.created_at }))}
                   currentStatus={refund.status} allStatuses={refundStatuses} />
               </div>
             </>

@@ -2,59 +2,53 @@ export default function RefundPolicyPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <h1 className="text-3xl font-bold text-slate-900 mb-6">Refund Policy</h1>
-      <div className="prose prose-sm prose-slate max-w-none">
-        <p className="text-slate-500 text-sm mb-4">Last updated: July 2026</p>
+      <p className="text-sm text-slate-500 mb-8">Last updated: July 2026</p>
 
-        <h2 className="text-lg font-semibold text-slate-900 mt-8 mb-3">Eligibility</h2>
-        <p className="text-sm text-slate-600 leading-relaxed mb-4">
-          Refund requests are accepted for orders within 30 days of the order date. Eligible reasons include:
-          product not delivered, wrong item received, defective product, or order cancelled by seller after payment.
-        </p>
+      <div className="space-y-8 text-sm text-slate-600 leading-relaxed">
+        <section>
+          <h2 className="text-lg font-semibold text-slate-900 mb-3">Eligibility</h2>
+          <p>Refund requests must be submitted within 30 days of the order date. Eligible reasons include: item not delivered, defective product, incorrect item shipped, or order cancelled by the platform. Each request is reviewed on a case-by-case basis.</p>
+        </section>
 
-        <h2 className="text-lg font-semibold text-slate-900 mt-8 mb-3">Required Documentation</h2>
-        <ul className="list-disc pl-5 text-sm text-slate-600 space-y-1 mb-4">
-          <li>Tracking ID or order reference number</li>
-          <li>Proof of purchase (order confirmation screenshot)</li>
-          <li>Reason for refund request</li>
-          <li>Payment details for return (UPI or bank account)</li>
-        </ul>
+        <section>
+          <h2 className="text-lg font-semibold text-slate-900 mb-3">Required Documentation</h2>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Valid tracking ID (DF-ORD-XXXXXX format)</li>
+            <li>Proof of purchase or order screenshot</li>
+            <li>Reason for refund with supporting evidence</li>
+            <li>Valid payout destination (UPI ID or bank account last 4 digits + IFSC)</li>
+          </ul>
+        </section>
 
-        <h2 className="text-lg font-semibold text-slate-900 mt-8 mb-3">Processing Timeline</h2>
-        <div className="space-y-3 mb-4">
-          {[
-            { step: "1. Submitted", desc: "Your request is received and queued for review" },
-            { step: "2. Documents Received", desc: "Uploaded documents are verified" },
-            { step: "3. Verification", desc: "Case is reviewed by a mediator" },
-            { step: "4. Approved / Rejected", desc: "Decision is made based on policy" },
-            { step: "5. Paid", desc: "Refund amount is processed to your account" },
-          ].map((s) => (
-            <div key={s.step} className="flex gap-3">
-              <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-slate-900">{s.step}</p>
-                <p className="text-xs text-slate-500">{s.desc}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+        <section>
+          <h2 className="text-lg font-semibold text-slate-900 mb-3">Processing Timeline</h2>
+          <div className="space-y-3">
+            <div className="flex gap-3"><span className="font-medium text-slate-900 w-32 shrink-0">1. Submitted</span><span>Refund request is received and awaits initial review.</span></div>
+            <div className="flex gap-3"><span className="font-medium text-slate-900 w-32 shrink-0">2. Documents</span><span>Supporting documents are verified.</span></div>
+            <div className="flex gap-3"><span className="font-medium text-slate-900 w-32 shrink-0">3. Verification</span><span>Order details and eligibility are confirmed.</span></div>
+            <div className="flex gap-3"><span className="font-medium text-slate-900 w-32 shrink-0">4. Approved</span><span>Refund is approved and queued for payout.</span></div>
+            <div className="flex gap-3"><span className="font-medium text-slate-900 w-32 shrink-0">5. Paid</span><span>Refund amount is disbursed to the provided payout destination.</span></div>
+          </div>
+          <p className="mt-4">Estimated processing time: 5&ndash;10 business days after document verification.</p>
+        </section>
 
-        <h2 className="text-lg font-semibold text-slate-900 mt-8 mb-3">Rejection Reasons</h2>
-        <p className="text-sm text-slate-600 leading-relaxed mb-4">
-          Refund requests may be rejected if the documentation is insufficient, the order is outside the eligible
-          window, or the reason does not match our refund policy criteria.
-        </p>
+        <section>
+          <h2 className="text-lg font-semibold text-slate-900 mb-3">Rejection Reasons</h2>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Refund requested after 30-day window</li>
+            <li>Insufficient or fraudulent documentation</li>
+            <li>Order already refunded by the original platform</li>
+            <li>Violation of terms of service</li>
+          </ul>
+        </section>
 
-        <h2 className="text-lg font-semibold text-slate-900 mt-8 mb-3">Contact</h2>
-        <p className="text-sm text-slate-600 leading-relaxed mb-4">
-          For questions about this policy, contact us at support@dealflowportal.com.
-        </p>
-
-        <div className="mt-8 p-4 bg-slate-50 rounded-lg border border-slate-200">
-          <p className="text-xs text-slate-400">
-            Template refund policy. Review and customize for your business before launch.
-          </p>
-        </div>
+        <section>
+          <h2 className="text-lg font-semibold text-slate-900 mb-3">Contact</h2>
+          <p>For refund-related inquiries, contact support@dealflowportal.com.</p>
+        </section>
       </div>
+
+      <p className="text-xs text-slate-400 mt-10 border-t border-slate-100 pt-4">This policy is a template and should be reviewed by legal counsel before official launch.</p>
     </div>
   );
 }

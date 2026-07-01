@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import FormInput from "@/components/FormInput";
+import FileUpload from "@/components/FileUpload";
 import { submitRefund } from "@/lib/supabase/refunds";
 import { addToast } from "@/lib/store";
 
@@ -10,6 +11,8 @@ export default function RefundPage() {
   const [refundId, setRefundId] = useState("");
   const [showUpi, setShowUpi] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [reviewScreenshot, setReviewScreenshot] = useState("");
+  const [deliveryScreenshot, setDeliveryScreenshot] = useState("");
 
   const [form, setForm] = useState({
     trackingId: "",
@@ -55,6 +58,8 @@ export default function RefundPage() {
       ifsc: form.paymentMethod === "bank_transfer" ? form.ifsc : undefined,
       whatsapp: form.whatsapp,
       reason: form.reason,
+      reviewScreenshotUrl: reviewScreenshot || undefined,
+      deliveryScreenshotUrl: deliveryScreenshot || undefined,
     });
 
     setLoading(false);
@@ -102,18 +107,6 @@ export default function RefundPage() {
         <p className="text-sm text-slate-500 mt-1">Submit a refund request for an eligible order</p>
       </div>
 
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
-        <div className="flex gap-3">
-          <svg className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 1.502-1.667.875-2.5L13.732 4c-.627-.833-1.543-.833-2.17 0L4.066 16.5c-.627.833-.665 2.5.875 2.5z" />
-          </svg>
-          <div>
-            <p className="text-sm font-semibold text-amber-800">Security Notice</p>
-            <p className="text-xs text-amber-700 mt-1">This is a demo platform. For your security, do not enter real bank account numbers, UPI IDs, or financial details. Use masked/test data only.</p>
-          </div>
-        </div>
-      </div>
-
       <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-slate-200 shadow-sm">
         <div className="p-5 border-b border-slate-100">
           <h3 className="text-sm font-semibold text-slate-900 mb-4">Order Information</h3>
@@ -141,15 +134,23 @@ export default function RefundPage() {
             </div>
             <FormInput label="Account Holder Name" id="accountHolder" value={form.accountHolder} onChange={(e) => setForm({ ...form, accountHolder: e.target.value })} error={errors.accountHolder} placeholder="John Doe" />
             {showUpi ? (
-              <FormInput label="UPI ID (masked)" id="upiId" value={form.upiId} onChange={(e) => setForm({ ...form, upiId: e.target.value })} error={errors.upiId} placeholder="example@paytm" />
+              <FormInput label="UPI ID" id="upiId" value={form.upiId} onChange={(e) => setForm({ ...form, upiId: e.target.value })} error={errors.upiId} placeholder="example@paytm" />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <FormInput label="Bank Account (Last 4 Digits Only)" id="bankLast4" inputMode="numeric" value={form.bankLast4}
+                <FormInput label="Last 4 Digits of Account" id="bankLast4" inputMode="numeric" value={form.bankLast4}
                   onChange={(e) => { const val = e.target.value.replace(/\D/g, "").slice(0, 4); setForm({ ...form, bankLast4: val }); }}
                   error={errors.bankLast4} placeholder="6789" maxLength={4} />
                 <FormInput label="IFSC Code" id="ifsc" value={form.ifsc} onChange={(e) => setForm({ ...form, ifsc: e.target.value.toUpperCase() })} error={errors.ifsc} placeholder="HDFC0001234" />
               </div>
             )}
+          </div>
+        </div>
+
+        <div className="p-5 border-b border-slate-100">
+          <h3 className="text-sm font-semibold text-slate-900 mb-4">Supporting Documents</h3>
+          <div className="space-y-4">
+            <FileUpload label="Order Review Screenshot (optional)" id="reviewScreenshot" bucket="refund-screenshots" path={`refunds/${form.trackingId || "new"}`} onUploadComplete={setReviewScreenshot} onError={(e) => addToast("error", e)} />
+            <FileUpload label="Delivery Screenshot (optional)" id="deliveryScreenshot" bucket="refund-screenshots" path={`refunds/${form.trackingId || "new"}`} onUploadComplete={setDeliveryScreenshot} onError={(e) => addToast("error", e)} />
           </div>
         </div>
 

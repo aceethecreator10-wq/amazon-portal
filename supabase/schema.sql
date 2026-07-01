@@ -55,10 +55,23 @@ begin
 end;
 $$;
 
--- PRODUCTION NOTE: Sequences could be replaced with a more sophisticated
--- scheme (e.g. hashed ULIDs) if sequential IDs pose an information leak.
+create or replace function generate_payout_id()
+returns text
+language plpgsql stable
+as $$
+declare
+  seq_id int;
+  payout text;
+begin
+  seq_id := nextval('payout_seq');
+  payout := 'DF-PAY-' || lpad(seq_id::text, 6, '0');
+  return payout;
+end;
+$$;
+
 create sequence if not exists order_tracking_seq start 100001;
 create sequence if not exists refund_seq start 100001;
+create sequence if not exists payout_seq start 100001;
 
 -- 4. ROLE HELPER FUNCTIONS
 -- ============================================================================
@@ -180,22 +193,59 @@ create table if not exists refund_requests (
   reason                 text,
   review_screenshot_url  text,
   delivery_screenshot_url text,
-  status                 text        not null default 'submitted' check (status in ('submitted','documents_received','verification','approved','rejected','paid')),
+  status                 text        not null default 'submitted' check (status in ('submitted','documents_received','verification','approved','rejected','payout_queued','paid','failed')),
   assigned_mediator_id   uuid        references profiles(id),
   admin_notes            text,
+  payout_id              uuid,
   created_at             timestamptz not null default now(),
   updated_at             timestamptz not null default now()
 );
 
--- PRODUCTION NOTE: Add CHECK constraints in application layer or via
--- Supabase Edge Functions to validate file types and sizes for
--- screenshot_url, review_screenshot_url, delivery_screenshot_url.
--- Consider storing uploads in Supabase Storage with row-level security.
+-- Payout Beneficiaries (safely stored payout destinations)
+create table if not exists payout_beneficiaries (
+  id                      uuid        primary key default gen_random_uuid(),
+  user_id                 uuid        references profiles(id) not null,
+  beneficiary_name        text        not null,
+  payment_method          text        not null check (payment_method in ('upi','bank_transfer')),
+  upi_masked              text,
+  bank_last4              text,
+  ifsc                    text,
+  provider_contact_id     text,
+  provider_fund_account_id text,
+  verification_status     text        not null default 'pending' check (verification_status in ('pending','verified','failed')),
+  created_at              timestamptz not null default now(),
+  updated_at              timestamptz not null default now()
+);
+
+-- Payouts (disbursements to beneficiaries)
+create table if not exists payouts (
+  id                uuid        primary key default gen_random_uuid(),
+  payout_id         text        unique not null default generate_payout_id(),
+  refund_request_id uuid        references refund_requests(id),
+  beneficiary_id    uuid        references payout_beneficiaries(id),
+  amount            numeric(10,2) not null,
+  provider          text        not null default 'manual' check (provider in ('razorpayx','cashfree','manual')),
+  provider_payout_id text,
+  idempotency_key   text        unique,
+  status            text        not null default 'created' check (status in ('created','queued','processing','processed','failed','cancelled','manual_required')),
+  failure_reason    text,
+  created_by        uuid        references profiles(id),
+  processed_by      uuid        references profiles(id),
+  processed_at      timestamptz,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+
+-- Add payout_id FK to refund_requests after payouts table exists
+alter table if exists refund_requests
+  add constraint fk_refund_requests_payout
+  foreign key (payout_id) references payouts(id)
+  not valid;
 
 -- Status Logs (audit trail for state transitions)
 create table if not exists status_logs (
   id          uuid        primary key default gen_random_uuid(),
-  entity_type text        not null check (entity_type in ('order','refund')),
+  entity_type text        not null check (entity_type in ('order','refund','payout')),
   entity_id   uuid        not null,
   old_status  text,
   new_status  text        not null,
@@ -223,6 +273,8 @@ create table if not exists audit_logs (
   entity_type text,
   entity_id   uuid,
   metadata    jsonb,
+  ip_address  text,
+  user_agent  text,
   created_at  timestamptz not null default now()
 );
 
@@ -238,6 +290,10 @@ create index if not exists idx_refund_requests_buyer_id             on refund_re
 create index if not exists idx_refund_requests_order_id             on refund_requests(order_id);
 create index if not exists idx_refund_requests_assigned_mediator_id on refund_requests(assigned_mediator_id);
 create index if not exists idx_refund_requests_status               on refund_requests(status);
+
+create index if not exists idx_payouts_refund_request_id on payouts(refund_request_id);
+create index if not exists idx_payouts_status             on payouts(status);
+create index if not exists idx_payout_beneficiaries_user_id on payout_beneficiaries(user_id);
 
 create index if not exists idx_status_logs_entity on status_logs(entity_type, entity_id);
 
@@ -270,17 +326,29 @@ create trigger update_updated_at
   for each row
   execute function update_updated_at();
 
+create trigger update_updated_at
+  before update on payout_beneficiaries
+  for each row
+  execute function update_updated_at();
+
+create trigger update_updated_at
+  before update on payouts
+  for each row
+  execute function update_updated_at();
+
 -- 8. ROW-LEVEL SECURITY
 -- ============================================================================
 
 -- Enable RLS on all tables
-alter table if exists profiles        enable row level security;
-alter table if exists deals           enable row level security;
-alter table if exists orders          enable row level security;
-alter table if exists refund_requests enable row level security;
-alter table if exists status_logs     enable row level security;
-alter table if exists notifications   enable row level security;
-alter table if exists audit_logs      enable row level security;
+alter table if exists profiles             enable row level security;
+alter table if exists deals                enable row level security;
+alter table if exists orders               enable row level security;
+alter table if exists refund_requests      enable row level security;
+alter table if exists payout_beneficiaries enable row level security;
+alter table if exists payouts              enable row level security;
+alter table if exists status_logs          enable row level security;
+alter table if exists notifications        enable row level security;
+alter table if exists audit_logs           enable row level security;
 
 -- ----------------------------------------------------------------------------
 -- PROFILES
@@ -316,6 +384,10 @@ create policy "Anyone can select active or closing_soon deals"
   on deals for select
   using (status in ('active','closing_soon'));
 
+create policy "Mediators can select all non-draft deals"
+  on deals for select
+  using (is_mediator() and status != 'draft');
+
 create policy "Admins can select all deals"
   on deals for select
   using (is_admin());
@@ -341,9 +413,9 @@ create policy "Buyers can select own orders"
   on orders for select
   using (buyer_id = auth.uid());
 
-create policy "Mediators can select assigned orders"
+create policy "Mediators can select assigned or unassigned orders"
   on orders for select
-  using (assigned_mediator_id = auth.uid());
+  using (is_mediator() and (assigned_mediator_id = auth.uid() or assigned_mediator_id is null));
 
 create policy "Admins can select all orders"
   on orders for select
@@ -353,10 +425,6 @@ create policy "Buyers can insert orders"
   on orders for insert
   with check (buyer_id = auth.uid());
 
--- PRODUCTION NOTE: The mediator update policy below uses a column-level
--- approach. If more granular field restrictions are needed (e.g. mediators
--- must not change buyer_id or amount), consider splitting into a
--- separate edge function or using trigger-based validation.
 create policy "Mediators can update assigned orders"
   on orders for update
   using (assigned_mediator_id = auth.uid())
@@ -379,9 +447,9 @@ create policy "Buyers can select own refund requests"
   on refund_requests for select
   using (buyer_id = auth.uid());
 
-create policy "Mediators can select assigned refund requests"
+create policy "Mediators can select assigned or unassigned refunds"
   on refund_requests for select
-  using (assigned_mediator_id = auth.uid());
+  using (is_mediator() and (assigned_mediator_id = auth.uid() or assigned_mediator_id is null));
 
 create policy "Admins can select all refund requests"
   on refund_requests for select
@@ -406,6 +474,69 @@ create policy "Admins can delete any refund request"
   using (is_admin());
 
 -- ----------------------------------------------------------------------------
+-- PAYOUT BENEFICIARIES
+-- ----------------------------------------------------------------------------
+
+create policy "Buyers can select own beneficiaries"
+  on payout_beneficiaries for select
+  using (user_id = auth.uid());
+
+create policy "Buyers can insert own beneficiaries"
+  on payout_beneficiaries for insert
+  with check (user_id = auth.uid());
+
+create policy "Buyers can update own beneficiaries"
+  on payout_beneficiaries for update
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+create policy "Admins can select all beneficiaries"
+  on payout_beneficiaries for select
+  using (is_admin());
+
+create policy "Admins can update beneficiaries"
+  on payout_beneficiaries for update
+  using (is_admin())
+  with check (is_admin());
+
+-- ----------------------------------------------------------------------------
+-- PAYOUTS
+-- ----------------------------------------------------------------------------
+
+create policy "Buyers can select own payouts"
+  on payouts for select
+  using (
+    exists (
+      select 1 from refund_requests r
+      where r.id = payouts.refund_request_id
+        and r.buyer_id = auth.uid()
+    )
+  );
+
+create policy "Mediators can select payouts for assigned refunds"
+  on payouts for select
+  using (
+    exists (
+      select 1 from refund_requests r
+      where r.id = payouts.refund_request_id
+        and r.assigned_mediator_id = auth.uid()
+    )
+  );
+
+create policy "Admins can select all payouts"
+  on payouts for select
+  using (is_admin());
+
+create policy "Admins can insert payouts"
+  on payouts for insert
+  with check (is_admin());
+
+create policy "Admins can update payouts"
+  on payouts for update
+  using (is_admin())
+  with check (is_admin());
+
+-- ----------------------------------------------------------------------------
 -- STATUS LOGS
 -- ----------------------------------------------------------------------------
 
@@ -428,6 +559,13 @@ create policy "Users can select logs for own orders"
         and status_logs.entity_type = 'refund'
         and r.buyer_id = auth.uid()
     )
+    or exists (
+      select 1 from payouts p
+      join refund_requests r on r.id = p.refund_request_id
+      where p.id = status_logs.entity_id
+        and status_logs.entity_type = 'payout'
+        and r.buyer_id = auth.uid()
+    )
   );
 
 create policy "Mediators can select logs for assigned entities"
@@ -443,6 +581,13 @@ create policy "Mediators can select logs for assigned entities"
       select 1 from refund_requests r
       where r.id = status_logs.entity_id
         and status_logs.entity_type = 'refund'
+        and r.assigned_mediator_id = auth.uid()
+    )
+    or exists (
+      select 1 from payouts p
+      join refund_requests r on r.id = p.refund_request_id
+      where p.id = status_logs.entity_id
+        and status_logs.entity_type = 'payout'
         and r.assigned_mediator_id = auth.uid()
     )
   );
@@ -472,9 +617,6 @@ create policy "Admins can insert notifications"
 -- AUDIT LOGS
 -- ----------------------------------------------------------------------------
 
--- PRODUCTION NOTE: audit_logs INSERT should ideally come from a
--- server-side trigger or Edge Function rather than from the client.
--- The select policy below restricts reads to admins only.
 create policy "Admins can select audit logs"
   on audit_logs for select
   using (is_admin());

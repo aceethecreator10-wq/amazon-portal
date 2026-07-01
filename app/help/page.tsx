@@ -5,30 +5,11 @@ export default function HelpPage() {
 
       <div className="space-y-4 mb-12">
         {[
-          {
-            q: "How do I submit an order?",
-            a: "Browse Live Deals, select a deal, and click 'Submit Order'. Fill in your details and the order will be processed.",
-          },
-          {
-            q: "How do I track my order?",
-            a: "Go to the Track page and enter your Tracking ID (e.g., DF-ORD-100001). You can see the current status and timeline.",
-          },
-          {
-            q: "How do I request a refund?",
-            a: "Go to the Refund page, enter your Tracking ID, provide payment details and reason, and submit the request.",
-          },
-          {
-            q: "Who can use the mediator dashboard?",
-            a: "Mediators are assigned cases by administrators. They can review and update status on assigned orders and refunds.",
-          },
-          {
-            q: "How do I contact support?",
-            a: "For support inquiries, email support@dealflowportal.com. We aim to respond within 24 hours.",
-          },
-          {
-            q: "Is this a real payment platform?",
-            a: "No. DealFlow Portal is a demo platform for demonstration purposes. No real financial transactions occur.",
-          },
+          { q: "How do I submit an order?", a: "Browse Live Deals, select a deal, and click 'Submit Order'. Fill in your details and the order will be processed." },
+          { q: "How do I track my order?", a: "Go to the Track page and enter your Tracking ID (e.g., DF-ORD-100001). You can see the current status and timeline." },
+          { q: "How do I request a refund?", a: "Go to the Refund page, enter your Tracking ID, provide payment details and reason, and submit the request." },
+          { q: "Who can use the mediator dashboard?", a: "Mediators are assigned cases by administrators. They can review and update status on assigned orders and refunds." },
+          { q: "How do I contact support?", a: "For support inquiries, email support@dealflowportal.com. We aim to respond within 24 hours." },
         ].map((faq, i) => (
           <details key={i} className="bg-white rounded-xl border border-slate-200 group">
             <summary className="px-5 py-4 cursor-pointer text-sm font-medium text-slate-900 list-none flex items-center justify-between">
