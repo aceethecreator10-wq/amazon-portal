@@ -16,9 +16,9 @@
 
 DO $$
 DECLARE
-  buyer_id UUID := '00000000-0000-0000-0000-000000000001';
-  mediator_id UUID := '00000000-0000-0000-0000-000000000002';
-  admin_id UUID := '00000000-0000-0000-0000-000000000003';
+  buyer_id UUID := '6cfcc18f-534c-436d-a1d7-1bef968453c8';
+  mediator_id UUID := '36c6a8e1-87c1-40ba-b746-17ce167f327e';
+  admin_id UUID := '17424cc6-1455-4ba6-b6eb-4edf0a786519';
   deal1_id UUID; deal2_id UUID; deal3_id UUID; deal4_id UUID;
   deal5_id UUID; deal6_id UUID; deal7_id UUID; deal8_id UUID;
   ord1_id UUID; ord2_id UUID; ord3_id UUID; ord4_id UUID; ord5_id UUID;
